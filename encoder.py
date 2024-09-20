@@ -72,4 +72,25 @@ class VAE_Encoder(nn.Sequential):
         for module in self:
             if getattr(module, 'stide', None) == (2,2):
                  x = F.pad(x,(0, 1, 0, 1))
-            x = module(x)
+            x = module(x) 
+        # (Batch_size, 8, Height / 8, Width / 8) -> (Batch_Size, 4, Height / 8, Width / 8) , (Batch_Size, 4, Height / 8, Width / 8)
+        mean, log_variance = torch.chunk(x, 2, dim=1)
+
+        # (Batch_Size, 4, Height / 8, Width / 8) -> (Batch_Size, 4, Height / 8, Width / 8)
+        log_variance = torch.clamp(log_variance, -30, 20)
+
+        # (Batch_Size, 4, Height / 8, Width / 8) -> (Batch_Size, 4, Height / 8, Width / 8)
+        variance = log_variance.exp()
+
+        # (Batch_Size, 4, Height / 8, Width / 8) -> (Batch_Size, 4, Height / 8, Width / 8)
+        stdev = variance.sqrt()
+
+        # Z = N(0, 1) -> N(Mean, Variance)
+        # X = mean + stdev * Z
+        x = mean + stdev * noise
+
+        # Scale the output by constant 
+        # Idk why they use this constant
+        x *= 0.18215
+
+        return x
