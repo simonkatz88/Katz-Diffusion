@@ -87,10 +87,7 @@ class Upsample(nn.Module):
         x = F.interpolate(x, scale_factor=2, mode="nearest")
         return self.conv
 
-
-
-
-
+  
 class UNET(nn.Module):
 
     def __init__(self):
