@@ -1,10 +1,11 @@
 import torch
+from torch import *
 from torch import nn
+from torch import Tensor
 from torch.nn import functional as F
-from attention import SelfAttention, CrossAttention
-
+from sd.attention import SelfAttention, CrossAttention
 class TimeEmbedding(nn.Module):
-    def __init__(self, n_embd: int):
+    def __init__(self, n_embd):
         super().__init()
         self.linear_1 = nn.Linear(n_embd, 4 * n_embd)
         self.linear_2 = nn.Linear( 4 * n_embd, 4 * n_embd)
@@ -33,10 +34,9 @@ class SwitchSequential(nn.Sequential):
                 x = layer(x)
             return x
 
-
 class UNET_ReidualBlock(nn.Module):
     
-    def __init__(self, in_channels: int, out_channels: int, n_time=1280):
+    def __init__(self, in_channels, out_channels, n_time=1280):
         super().__init__()
         self.groupnorm_features = nn.GroupNorm(32 ,in_channels)
         self.conv_features = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
@@ -76,9 +76,84 @@ class UNET_ReidualBlock(nn.Module):
 
         return merged + residue
 
-class Upsample(nn.Module):
+class UNET_AttentionBlock(nn.Module):
+
+    def __init__(self, n_head, n_embd, d_context = 768):
+        super().__init__()
+        channels = n_head * n_embd
+
+        self.group_norm = nn.GroupNorm(32, channels, eps=1e-6)
+        self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
+
+
+        self.layernorm_1 = nn.LayerNorm(channels)
+        self.attention_1 = SelfAttention(n_head, channels, in_proj_bias=False)
+        self.layernorm_2 = nn.LayerNorm(channels)
+        self.attention_2 = CrossAttention(n_head, channels, d_context, inproj_bias=False)
+        self.layernorm_3 = nn.LayerNorm(channels)
+        self.linear_gelu_1 = nn.Linear(channels, 4 * channels * 2)
+        self.linear_gelu_2 = nn.Linear(4 * channels, channels)
+
+        self.conv_output = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
+
+
+    def forward(self, x, context):
+        # x: (Batch_Size, Features, Height, Width)
+        # context: (Batch_Size, Seq_Len, Dim)
+        residue_long = x
+
+        x = self.group_norm(x)
+
+        x = self.conv_input(x)
+
+        n, c, h, w = x.shape
+
+        # (Batch_Size, Features, Height,  Width) -> (Batch_Size, Features, Height * Width)
+        x = x.view(n, c, h * w)
+
+        # (Batch_Size, Features, Height * Width) -> (Batch_Size, Height * Width, Features)
+        x = x.transpose(-1, -2)
+
+        # Normalization + Self Attention with skip connection
+        
+        residue_short = x
+
+        x = self.layernorm_1(x)
+        self.attention_1(x)
+        x += residue_short
+        
+        residue_short = x
+        
+        # Normalizaton + Cross Attention with skip connection
+        x = self.layernorm_2(x)
+        
+        # Cross Attention
+        self.attention_2(x, context)
+
+        x += residue_short
+
+        # Normalization + FFN with GeLu and skip connection
+        x = self.layernorm_3(x)
+
+        x, gate = self.linear_gelu_1(x).chunk(2, dim=-1)
+
+        x = x * F.gelu(gate)
+
+        x = self.linear_gelu_2(x)
+
+        x += residue_short
+
+        # (Batch_Size, Height * Width, Features) -> (Batch_Size, Features, Height * Width)
+        x = x.traspose(-1, -2)
+
+        # (Batch_Size, Features, Height * Width) -> (Batch_Size, Features, Height, Width)
+        x = x.view((n, c, h, w))
+
+        return self.conv_output(x) + residue_long
+
+class UpSample(nn.Module):
     
-    def __init__(self, channels: int):
+    def __init__(self, channels):
         super().__init__()
         self.conv = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
     
@@ -87,7 +162,6 @@ class Upsample(nn.Module):
         x = F.interpolate(x, scale_factor=2, mode="nearest")
         return self.conv
 
-  
 class UNET(nn.Module):
 
     def __init__(self):
@@ -157,7 +231,7 @@ class UNET(nn.Module):
             ])
 
 class UNET_OutputLayer(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
         self.groupnorm = nn.GroupNorm(32, in_channels)
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
