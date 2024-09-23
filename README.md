@@ -1,2 +1,2 @@
-I often find it helpful to implement a model from scratch.
-This is my stab at implementing the model described in High-Resolution Image Synthesis with Latent Diffusion Models
+I find a helpful learning exercise to implement a model from scratch.
+This is my stab at implementing a latent diffusion model similar to that of the one described in https://arxiv.org/pdf/2112.10752.
