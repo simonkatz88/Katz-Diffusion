@@ -3,8 +3,11 @@ from torch import nn
 from torch.nn import functional as F
 import math
 
+
 class SelfAttention(nn.Module):
-    def __init__(self, n_heads: int, d_embed: int, in_proj_bias = True, out_proj_bias = True):
+    def __init__(
+        self, n_heads: int, d_embed: int, in_proj_bias=True, out_proj_bias=True
+    ):
         super().__init__()
 
         self.in_proj = nn.Linear(d_embed, 3 * d_embed, bias=in_proj_bias)
@@ -24,9 +27,9 @@ class SelfAttention(nn.Module):
         q, k, v = self.in_proj(x).chunk(3, dim=-1)
 
         # (Batch_Size, Seq_Len, Dim) -> (Batch_Size, Seq_Len, H, Dim / H) -> (Batch_Size, H, Seq_Len, Dim / H)
-        q = q.view(intermin_shape).transpose(1,2)
-        k = k.view(intermin_shape).transpose(1,2)
-        v = v.view(intermin_shape).transpose(1,2)
+        q = q.view(intermin_shape).transpose(1, 2)
+        k = k.view(intermin_shape).transpose(1, 2)
+        v = v.view(intermin_shape).transpose(1, 2)
         # (Batch_Size, H, Seq_Len * Seq_Len)
         weight = q @ k.transpose(-1, -2)
 
@@ -34,14 +37,14 @@ class SelfAttention(nn.Module):
             # Mask upper triangle
             mask = torch.ones_like(weight, dtype=torch.bool).triu(1)
             weight.masked_fill_(mask, -torch.inf)
-        
+
         weight /= math.sqrt(self.d_head)
 
         weight = F.softmax(weight, dim=-1)
-        # (Batch_Size, H, Seq_Len) @ (Batch_Size, H Seq_Len, Dim / H) -> (Batch_Size, H, Seq_Len, Dim / H) 
+        # (Batch_Size, H, Seq_Len) @ (Batch_Size, H Seq_Len, Dim / H) -> (Batch_Size, H, Seq_Len, Dim / H)
         output = weight @ v
         # (Back_Size, H, Seq_Len, Dim / H) -> ( Batch_Size, Seq_Len, H, Dim / H)
-        output = output.tranpose(1,2)
+        output = output.tranpose(1, 2)
 
         output = output.reshape(input_shape)
 
@@ -49,8 +52,16 @@ class SelfAttention(nn.Module):
 
         x += residue
 
+
 class CrossAttention(nn.Module):
-    def __init__(self, n_heads: int, d_embed: int, d_cross: int, in_proj_bias = True, out_proj_bias = True):
+    def __init__(
+        self,
+        n_heads: int,
+        d_embed: int,
+        d_cross: int,
+        in_proj_bias=True,
+        out_proj_bias=True,
+    ):
         super().__init__()
         self.q_proj = nn.Linear(d_embed, d_embed, bias=in_proj_bias)
         self.k_proj = nn.Linear(d_cross, d_embed, bias=in_proj_bias)
@@ -69,16 +80,15 @@ class CrossAttention(nn.Module):
 
         intermin_shape = (batch_size, -1, self.n_heads, self.d_head)
 
-
         # Multiply query by Wq
         q = self.q_proj(x)
         k = self.k_proj(y)
         v = self.v_proj(y)
-        
+
         # see shapes from selfattention class
-        q = q.view(intermin_shape).transpose(1,2)
-        k = k.view(intermin_shape).transpose(1,2)
-        v = v.view(intermin_shape).transpose(1,2)
+        q = q.view(intermin_shape).transpose(1, 2)
+        k = k.view(intermin_shape).transpose(1, 2)
+        v = v.view(intermin_shape).transpose(1, 2)
 
         weight = q @ k.transpose(-1, -2)
 
@@ -87,7 +97,7 @@ class CrossAttention(nn.Module):
         weight = F.softmax(weight, dim=-1)
 
         output = weight @ v
-        output = output.transpose(1,2)
+        output = output.transpose(1, 2)
         output = output.reshape(input_shape)
 
         output = self.out_proj(output)

@@ -1,0 +1,5 @@
+*.ckpt
+*.jpeg
+*.jpg
+*.png
+*.DS_Store

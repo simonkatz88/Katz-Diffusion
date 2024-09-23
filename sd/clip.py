@@ -10,7 +10,7 @@ class CLIPEmbedding(nn.Module):
 
         self.token_embedding = nn.Embedding(n_vocab, n_embd)
         self.positional_embedding = nn.Parameter(torch.zeros(n_tokens, n_embd))
-    
+
     def forward(self, tokens):
         # (Batch_Size, Seq_Len, Dim)
         x = self.token_embedding(tokens)
@@ -18,6 +18,7 @@ class CLIPEmbedding(nn.Module):
         x += self.positional_embedding
 
         return x
+
 
 class CLIPLayer(nn.Module):
     def __init__(self, n_head: int, n_embd: int) -> None:
@@ -47,8 +48,8 @@ class CLIPLayer(nn.Module):
         x = self.layernorm_2(x)
 
         x = self.linear_1(x)
-        
-        # quickgelu 
+
+        # quickgelu
         x = x * torch.sigmoid(1.702 * x)
 
         x = self.linear_2(x)
@@ -58,22 +59,17 @@ class CLIPLayer(nn.Module):
         return x
 
 
-
-
 class CLIP(nn.Module):
     def __init__(self):
-        # vocab size, sequence length, padding 
+        # vocab size, sequence length, padding
         self.embeddings = CLIPEmbedding(49408, 768, 77)
 
-        self.layers = nn.Module([
-            CLIPLayer(12,76) for i in range(12)
-        ])
+        self.layers = nn.Module([CLIPLayer(12, 76) for i in range(12)])
 
         self.layernorm = nn.LayerNorm(768)
 
     def forward(self, tokens: torch.LongTensor) -> torch.FloatTensor:
         tokens = tokens.type(torch.long)
-
 
         # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim)
 
